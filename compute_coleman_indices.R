@@ -3,17 +3,18 @@
 # compute ego's segregation index.
 
 coleman_index <- function (G, g) { 
-  # G is the network object, g is a vector with group assignments (coerced to factor)
+  # G is the network object, g is a factor with group assignments
   
   # Safety move
-    stopifnot(is.network(G)) # Making sure G has correct class
+    stopifnot(is.network(G), is.factor(g)) # Making sure G has correct class, and g is a factor
     
   # Housekeeping
-    diag.remove(G, remove.val = 0) # Remove potential auto-nominations
+    diag.remove(G, remove.val = 1) # Set diagonals to 1 (this is taken into account when computing out degrees below)
+    vertices <- network.vertex.names(G)
     g <- as.factor(g) # Coerce g into factor
     N <- G$gal$n # Network size
     A <- as.sociomatrix.sna(G, force.bipartite = TRUE) # Adjacency matrix, which we use repeatedly in loop
-    out_degs <- rowSums(A) # 1-by-N vector with out-degrees
+    out_degs <- rowSums(A) - 1 # 1-by-N vector with out-degrees; 1 is subtracted because all diagonals are set to one above
     n <- table(g) # Look-up table with frequencies of each group (used in for loop)
   
   # Create "group-weight" matrix with information on same-group nominations
@@ -31,23 +32,21 @@ coleman_index <- function (G, g) {
     A_group <- A * W_group 
   
   # Generating the data for output
-    indices <- list()
-    for (i in seq(N)) {
-      subgraph <- unname(A[i, ] == 1) # Sub-graph consists of i and i's alters; unnamed so it can be used for subsetting later on
-      subgraph[i] <- TRUE # Makes i part of its own sub-graph
-      
-      m_exp <- sum(out_degs[subgraph]) * (n[g[i]] - 1)/(N - 1) # i's expected number of same-group nominations 
-      m <- sum(A_group[subgraph, subgraph]) # i's actual number of same-group nominations
-      
-      indices[[i]] <- if (m >= m_exp) { # Compute and save i's segration index with if-else
-        (m - m_exp)/(sum(out_degs[subgraph]) - m_exp)
-      } else {
-        (m - m_exp)/m_exp
-      }
+  # FIX THIS. HAVE TO HIT THE SACK NOW. CHECK IF IT WORKS
+    o <- data.frame(vertex = network.vertex.names(G), m_exp = NA_integer_, m = NA_integer_)
+    subgraphs <- list()
+    for (v in vertices) {
+      subgraphs[[v]] <- unname(A[v, ] == 1) # Sub-graph consists of i and i's alters; unnamed so it can be used for subsetting later on
+      # subgraph[i] <- TRUE # Makes i part of its own sub-graph
+        # Consider trying out setting diag(A) = 1, so we don't have to do this N times
+      # o[i, "m_exp"] <- sum(out_degs[subgraph]) * (n[g[i]] - 1)/(N - 1) # i's expected number of same-group nominations 
+      # o[i, "m"] <- sum(A_group[subgraph, subgraph]) # i's actual number of same-group nominations
     }
-  
-  # Output 
-    data.frame(vertex = network.vertex.names(G), index = unlist(indices), group = g)
+    o$score <- ifelse(o$m >= o$m_exp, 
+                      (o$m - o$m_exp)/(sum(out_degs[subgraphs[o$vertex]]) - o$m_exp,
+                      (o$m - o$m_exp)/o$m_exp)
+    o$group <- g
+    o[, -c("m_exp", "m") # Returns relevant columns of data framE
 }
 
 timetest <- data.frame(N = 0, user.self = 0, sys.self = 0, elapsed = 0)
