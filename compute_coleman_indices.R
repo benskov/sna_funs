@@ -36,7 +36,7 @@ segregation <- function (G, g, index = "coleman") {
     # be a way to reflect this. It's especially true if the grouping variable is actually
     # continuous, so not grouping per se.
     
-    # Same-group adjacency matrix by element-wise multiplication
+    # Incidence matrix of same-group nominations by element-wise multiplication
     A_group <- A * W_group 
     
     # Generating the data for output
