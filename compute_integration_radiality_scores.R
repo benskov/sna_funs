@@ -22,7 +22,7 @@
 #' nodes <- LETTERS[1:20] # Node names
 #' A <- matrix(sample(0:1, 400, TRUE, c(0.75, 0.25)), 20, 20, dimnames = list(nodes, nodes))
 #' integration(A)
-#' radiality(A)
+#' radiality(A, rm.autonom = FALSE)
 
 integration <- function(...) {
     compute_int_rad_scores("i", ...)
