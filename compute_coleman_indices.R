@@ -1,24 +1,46 @@
-# This function implements the individual-level Coleman's segregation index formula proposed 
-# by Bojanowski and Corten (2014). It uses each ego's local network as the sub-graph to 
-# compute ego's segregation index. It extends the index to k groups instead of just two.
+#' Compute Coleman's homophily index
+#' 
+#' \code{colemanindex} returns the individual-level Coleman's homophily indices 
+#' proposed by Bojanowski and Corten (2014).
+#' 
+#' The number of groups has no upper limits. Increasing the number of groups
+#' comes without computational costs.
+#' 
+#' The current version is binary: either you're in group i or you're not. Groups
+#' i and j, however, may be more alike than i and k, which should probably be
+#' reflected in future versions. This is especially true with continuous 
+#' "grouping" variables.
+#' 
+#' @param G an \code{network} object of square adjacency matrix with named 
+#'   dimensions. Dimnames are considered vertex names.
+#' @param g a vector with group assignments. Preferably, this vector is named 
+#'   with vertex names. If unnamed, elements must be in the same order as 
+#'   vertices in the adjacency matrix, to produce unambigious group assignments.
+#'   The length of \code{g} must be equal to the network size.
+#' @param inf.replace the homophily index of disconnected nodes; by default, 
+#'   this is equal to \code{Inf}.
+#'   
+#' @return 
+#' A tidy data frame with three columns: node name, homophily index, and
+#' group assignment.
+#' 
+#' @references 
+#' Bojanowski, M. and Corten, R. (2014) **Measuring segregation in
+#' social networks**. Social Networks. 2014;39:14-32.
+#' 
+#' @examples 
+#' nodes <- LETTERS[1:20] # Node names
+#' A <- matrix(sample(0:1, 400, TRUE, c(0.75, 0.25)), 20, 20, dimnames = list(nodes, nodes))
+#' diag(A) <- 0 # No auto-nominations
+#' groups <- setNames(c(rep("smoker", 10), rep("non-smoker", 10)), nodes)
+#' colemanindex(A, groups, inf.replace = 0)
 
-# A weakness of this function is that it's black-and-white, i.e., either you're in group i
-# or you're not. But groups i and j may be more alike than i and k, and there should
-# be a way to reflect this. It's especially true if the grouping variable is actually
-# continuous, so not grouping per se.
-
-segregation <- function (G, g, inf.replace = Inf, index = "coleman") { 
-    # G is the network object or a square matrix
-    # g is a vector with group assignments, preferably named to have unambigious group assignment to each vertix
-    # inf.replace is used for isolates; trying to follow the same line of thought as sna::geodist()
-    # only Coleman index supported so far
-    
+colemanindex <- function (G, g, inf.replace = Inf) { 
     # Savety moves and housekeeping
-    stopifnot(!is.null(g), index == "coleman")
     if (is.network(G)) {
-        A <- as.sociomatrix.sna(G, force.bipartite = TRUE)
-        vertices <- network.vertex.names(G)
-        N <- network.size(G)
+        A <- sna::as.sociomatrix.sna(G)
+        vertices <- sna::network.vertex.names(G)
+        N <- sna::network.size(G)
     } else if (is.matrix(G) & nrow(G) == ncol(G) & !is.null(rownames(G)) & 
                all(rownames(G) == colnames(G))) {
         A <- G
@@ -27,8 +49,9 @@ segregation <- function (G, g, inf.replace = Inf, index = "coleman") {
     } else {
         stop("Please, provide valid arguments.")
     }
-    diag(A) <- 1 # Now we don't have to include i in its own sub-graph in each loop below
-    out_degs <- rowSums(A) - 1 # out_degrees; 1 is subtracted to counter 1-diagonal
+    stopifnot(!is.null(g), length(g) == N)
+    diag(A) <- 1 # This way, we don't have to include i in its own sub-graph in each loop below
+    out_degs <- rowSums(A) - 1 # Out-degrees; 1 is subtracted to counter 1-diagonal
     g <- if (!is.null(names(g))) as.factor(g) else setNames(as.factor(g), as.character(vertices))
     n <- table(g) # Look-up table with group frequencies; used in for loop
     
@@ -39,24 +62,27 @@ segregation <- function (G, g, inf.replace = Inf, index = "coleman") {
         W_group[same_group, same_group] <- 1 # w_ij set to 1 when i and j are in the same group
     }
     
-    # Same-group adjacency matrix by element-wise multiplication
+    # Same-group adjacency matrix
     A_group <- A * W_group 
     
     # Calculating indices
     indices <- list()
     for (v in vertices) {
         subgraph <- which(A[v, ] == 1)
-        if (sum(out_degs[subgraph]) == 0) {
+        if (sum(out_degs[subgraph]) == 0) { 
+            # We need to test this somewhere, so better here so we can skip the 
+            # rest of the loop for isolates
             indices[[v]] <- inf.replace
             next
         }
-        m_exp <- sum(out_degs[subgraph]) * (n[g[v]] - 1)/(N - 1) # i's expected number of same-group nominations 
-        m <- sum(A_group[subgraph, subgraph]) # i's actual number of same-group nominations
+        m_exp <- sum(out_degs[subgraph]) * (n[g[v]] - 1)/(N - 1) # expected number of same-group nominations in i's local network
+        m <- sum(A_group[subgraph, subgraph]) # actual number of same-group nominations in i's local network
         indices[[v]] <- (m - m_exp)/ifelse(m >= m_exp, sum(out_degs[subgraph]) - m_exp, m_exp)
     }
     
     # Output 
-    data.frame(vertex = network.vertex.names(G), 
+    data.frame(node = vertices, 
                index = unlist(indices[vertices]), 
-               group = g[vertices])
+               group = g[vertices],
+               row.names = NULL)
 }
