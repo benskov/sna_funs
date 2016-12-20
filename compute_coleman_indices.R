@@ -45,7 +45,7 @@ segregation <- function (G, g, inf.replace = Inf, index = "coleman") {
     # Calculating indices
     indices <- list()
     for (v in vertices) {
-        subgraph <- unname(A[v, ] == 1) # Unnamed to allow subsetting below
+        subgraph <- which(A[v, ] == 1)
         if (sum(out_degs[subgraph]) == 0) {
             indices[[v]] <- inf.replace
             next
