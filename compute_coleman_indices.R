@@ -113,7 +113,7 @@ colemanindex <- function (G, g, method = "edgelist", inf.replace = Inf) {
     
     # Output 
     data.frame(node = vertices, 
-               index = unlist(indices[vertices]), 
-               group = g[vertices],
-               row.names = NULL)
+       index = unlist(indices[vertices]), 
+       group = g[vertices],
+       row.names = NULL)
 }
