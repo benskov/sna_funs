@@ -36,22 +36,29 @@
 #' colemanindex(A, groups, inf.replace = 0)
 
 colemanindex <- function (G, g, inf.replace = Inf) { 
+    # EDGE LIST VERSION
+    
+    
     # Savety moves and housekeeping
     if (is.network(G)) {
-        A <- sna::as.sociomatrix.sna(G)
+        A <- sna::as.edgelist.sna(G)
         vertices <- sna::network.vertex.names(G)
         N <- sna::network.size(G)
     } else if (is.matrix(G) & nrow(G) == ncol(G) & !is.null(rownames(G)) & 
                all(rownames(G) == colnames(G))) {
+        # Assumes "raw" adjacency matrix
         A <- G
         vertices <- colnames(G)
         N <- nrow(G)
+    } else if (is.data.frame(G)) {
+        # Assumes "raw" edge list in df format
+        
     } else {
         stop("Please, provide valid arguments.")
     }
     stopifnot(!is.null(g), length(g) == N)
+    out_degs <- rowSums(A) # Out-degrees
     diag(A) <- 1 # This way, we don't have to include i in its own sub-graph in each loop below
-    out_degs <- rowSums(A) - 1 # Out-degrees; 1 is subtracted to counter 1-diagonal
     g <- if (!is.null(names(g))) as.factor(g) else setNames(as.factor(g), as.character(vertices))
     n <- table(g) # Look-up table with group frequencies; used in for loop
     
