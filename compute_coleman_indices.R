@@ -3,8 +3,12 @@
 #' \code{colemanindex} returns the individual-level Coleman's homophily indices 
 #' proposed by Bojanowski and Corten (2014).
 #' 
+#' The function supports lists of graph objects. For now, the vector with group assignments is used for all networks, 
+#' so it should (a) hold group assignments for \italic{all} nodes, and (b) do so with unique node names. This
+#' is obviously suboptimal, and will be fixed later.
+#' 
 #' The number of groups has no upper limits. Increasing the number of groups
-#' comes without computational costs.
+#' comes without real computational costs.
 #' 
 #' The current version is binary: either you're in group i or you're not. Groups
 #' i and j, however, may be more alike than i and k, which should probably be
@@ -37,6 +41,12 @@
 #' colemanindex(A, groups, inf.replace = 0)
 
 colemanindex <- function (G, g, method = "edgelist", inf.replace = Inf) { 
+    if ((is.list(G) & !any(class(G) == "network")) & (!(any(class(G) %in% 
+        c("network", "matrix.csr", "matrix.csc", "matrix.ssr", "matrix.ssc", 
+          "matrix.hb", "data.frame"))))) {
+        return(lapply(G, colemanindex, g = g, method = method, inf.replace = inf.replace))
+    }
+    
     # Utility function
     compute_index <- function(m, sum_subgraph_out_degs, group_freq) {
         if (sum_subgraph_out_degs == 0) return(inf.replace)
@@ -49,25 +59,24 @@ colemanindex <- function (G, g, method = "edgelist", inf.replace = Inf) {
         el <- as.data.frame(G)
         vertices <- attr(G, "vnames")
         stopifnot(!is.null(vertices))
-        el$snd <- vertices[el$snd]
-        el$rec <- vertices[el$rec]
+        el[, 1] <- vertices[el[, 1]]
+        el[, 2] <- vertices[el[, 2]]
         N <- attr(G, "n")
         stopifnot(!is.null(g), length(g) == N)
         g <- if (!is.null(names(g))) as.factor(g) else setNames(as.factor(g), as.character(vertices))
         n <- table(g) # Look-up table with group frequencies; used in for loop
         
-        out_degs <- table(el$snd)
-        el$sg <- g[el$snd] == g[el$rec] # Are sender and receiver in the same group?
+        out_degs <- table(el[, 1])
+        el$sg <- g[el[, 1]] == g[el[, 2]] # Are sender and receiver in the same group?
         
         # Calculating indices
         indices <- list()
         for (v in vertices) {
-            subgraph <- c(v, el[el$snd == v, "rec"])
-            m <- sum(el[el$snd %in% subgraph & el$rec %in% subgraph, "sg"])
+            subgraph <- c(v, el[el[, 1] == v, 2])
+            m <- sum(el[el[, 1] %in% subgraph & el[, 2] %in% subgraph, "sg"])
             indices[[v]] <- compute_index(m, sum(out_degs[subgraph], na.rm = TRUE), n[g[v]])
         }
     } else if (method == "matrix") {
-        if (is.list(G)) stop("The function currently only accepts one network object at a time. You supplied a list, possibly of two or more network objects.")
         if (!is.matrix(G)) G <- network::as.sociomatrix(G)
         if (nrow(G) == ncol(G) & !is.null(rownames(G)) & all(rownames(G) == colnames(G))) {
             A <- G
