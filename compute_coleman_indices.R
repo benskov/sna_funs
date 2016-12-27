@@ -36,46 +36,66 @@
 #' colemanindex(A, groups, inf.replace = 0)
 
 colemanindex <- function (G, g, inf.replace = Inf) { 
-    # EDGE LIST VERSION
+    # Savety moves
+    stopifnot(!is.null(g), length(g) == N)
     
-    
-    # Savety moves and housekeeping
+    # Housekeeping
+    g <- if (!is.null(names(g))) as.factor(g) else setNames(as.factor(g), as.character(vertices))
+    n <- table(g) # Look-up table with group frequencies; used in for loop
     if (is.network(G)) {
-        A <- sna::as.edgelist.sna(G)
+        el <- sna::as.edgelist.sna(G)
+        el$sg <- g[el[, 1]] == g[el[, 2]] # Are ego and alter in the same group?
         vertices <- sna::network.vertex.names(G)
         N <- sna::network.size(G)
+        out_degs <- table(el[, 1])
+        format <- "edgelist"
     } else if (is.matrix(G) & nrow(G) == ncol(G) & !is.null(rownames(G)) & 
                all(rownames(G) == colnames(G))) {
         # Assumes "raw" adjacency matrix
         A <- G
         vertices <- colnames(G)
         N <- nrow(G)
-    } else if (is.data.frame(G)) {
-        # Assumes "raw" edge list in df format
+        out_degs <- rowSums(A) # Out-degrees
+        diag(A) <- 1 # This way, we don't have to include i in its own sub-graph in each loop below
+        format <- "adjmat"
         
+        # Matrix of same-group nominations
+        W_group <- matrix(0, nrow = N, ncol = N) # Populated below
+        for (i in levels(g[vertices])) {
+            same_group <- which(i == g) # Find all nodes in i'th group
+            W_group[same_group, same_group] <- 1 # w_ij set to 1 when i and j are in the same group
+        }
+    
+        # Same-group adjacency matrix
+        A_group <- A * W_group
+    } else if (is.data.frame(G)) {
+        stopifnot(ncol(G) >= 2)
+        el <- G
+        el$sg <- g[el[, 1]] == g[el[, 2]] # Are ego and alter in the same group?
+        vertices <- unique(el[, 1])
+        N <- length(vertices)
+        out_degs <- table(el[, 1])
+        format <- "edgelist"
     } else {
         stop("Please, provide valid arguments.")
     }
-    stopifnot(!is.null(g), length(g) == N)
-    out_degs <- rowSums(A) # Out-degrees
-    diag(A) <- 1 # This way, we don't have to include i in its own sub-graph in each loop below
-    g <- if (!is.null(names(g))) as.factor(g) else setNames(as.factor(g), as.character(vertices))
-    n <- table(g) # Look-up table with group frequencies; used in for loop
-    
-    # Matrix of same-group nominations
-    W_group <- matrix(0, nrow = N, ncol = N) # Populated below
-    for (i in levels(g[vertices])) {
-        same_group <- which(i == g) # Find all nodes in i'th group
-        W_group[same_group, same_group] <- 1 # w_ij set to 1 when i and j are in the same group
-    }
-    
-    # Same-group adjacency matrix
-    A_group <- A * W_group 
+        
+    # now it may be faster to save the m and m_exp values in lists and use ifelse() to comoute indices
+        # so we dont have to check the format in every loop...
     
     # Calculating indices
     indices <- list()
     for (v in vertices) {
-        subgraph <- which(A[v, ] == 1)
+        if (format == "edgelist") {
+            subgraph <- c(v, el[el[, 1] == v, 2])
+            m <- sum(el[el[, 1] %in% subgraph & el[, 2] %in% subgraph, "sg"])
+        } else if (format == "adjmat") {
+            subgraph <- which(A[v, ] == 1)
+            m <- sum(A_group[subgraph, subgraph]) # actual number of same-group nominations in i's local network
+        } else {
+            stop("Something's horribly wrong...")
+        }
+        
         if (sum(out_degs[subgraph]) == 0) { 
             # We need to test this somewhere, so better here so we can skip the 
             # rest of the loop for isolates
@@ -83,7 +103,6 @@ colemanindex <- function (G, g, inf.replace = Inf) {
             next
         }
         m_exp <- sum(out_degs[subgraph]) * (n[g[v]] - 1)/(N - 1) # expected number of same-group nominations in i's local network
-        m <- sum(A_group[subgraph, subgraph]) # actual number of same-group nominations in i's local network
         indices[[v]] <- (m - m_exp)/ifelse(m >= m_exp, sum(out_degs[subgraph]) - m_exp, m_exp)
     }
     
